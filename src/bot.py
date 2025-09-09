@@ -8,7 +8,7 @@ import subprocess
 from decouple import AutoConfig
 import requests
 
-from scraper import run_search
+from src.scraper import run_search
 
 def install_browsers():
     try:
