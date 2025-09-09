@@ -1,0 +1,9 @@
+.env
+src/scraper_sync.py
+
+__pycache__/
+.idea/
+
+*.pyc
+*.pyo
+*.pyda
