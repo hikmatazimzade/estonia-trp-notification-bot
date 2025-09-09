@@ -125,7 +125,7 @@ async def search_branch(page: Page, branch: int) -> Dict:
 async def run_search():
     async with async_playwright() as playwright:
         chromium = playwright.chromium
-        browser = await chromium.launch(headless=False)
+        browser = await chromium.launch(headless=True)
 
         # Create 5 tabs in the same browser and search concurrently
         tasks = []

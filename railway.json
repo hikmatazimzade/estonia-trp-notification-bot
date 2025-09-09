@@ -5,7 +5,7 @@
     "buildCommand": "pip install -r requirements.txt && playwright install chromium && playwright install-deps chromium"
   },
   "deploy": {
-    "startCommand": "Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp & export DISPLAY=:99 && python -m src.bot",
+    "startCommand": "python -m src.bot",
     "sleepApplication": false,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
