@@ -10,6 +10,68 @@ TRP_LINK = ("https://broneering.politsei.ee/MakeReservation/SelectLocation?"
 AVAILABLE_DAYS = {i: defaultdict(list) for i in range(5)}
 
 
+async def get_browser(chromium: async_playwright) -> async_playwright:
+    return await chromium.launch(
+        headless=True,
+        args=[
+            '--disable-blink-features=AutomationControlled',
+            '--disable-dev-shm-usage',
+            '--disable-web-security',
+            '--disable-features=IsolateOrigins,site-per-process',
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-accelerated-2d-canvas',
+            '--disable-gpu',
+            '--window-size=1920,1080',
+            '--start-maximized',
+            '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        ]
+    )
+
+
+async def get_context(browser: async_playwright) -> async_playwright:
+    return await browser.new_context(
+                viewport={'width': 1920, 'height': 1080},
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                locale='et-EE',  # Estonian locale
+                timezone_id='Europe/Tallinn',
+
+                extra_http_headers={
+                    'Accept-Language': 'et-EE,et;q=0.9,en;q=0.8',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                }
+            )
+
+
+async def add_page_script(page: async_playwright) -> None:
+    await page.add_init_script("""
+                                Object.defineProperty(navigator, 'webdriver', {
+                                    get: () => undefined
+                                });
+    
+                                // Override the permissions API
+                                const originalQuery = window.navigator.permissions.query;
+                                window.navigator.permissions.query = (parameters) => (
+                                    parameters.name === 'notifications' ?
+                                        Promise.resolve({ state: Notification.permission }) :
+                                        originalQuery(parameters)
+                                );
+    
+                                // Override plugins
+                                Object.defineProperty(navigator, 'plugins', {
+                                    get: () => [1, 2, 3, 4, 5]
+                                });
+    
+                                // Override languages
+                                Object.defineProperty(navigator, 'languages', {
+                                    get: () => ['et-EE', 'et', 'en-US', 'en']
+                                });
+                            """)
+
+
 async def get_branches(page: Page) -> tuple:
     await page.wait_for_selector(".btn.btn-light.btn-lg.btn-block.no-shadow",
                                  timeout=30_000)
@@ -96,7 +158,7 @@ async def search_branch(page: Page, branch: int) -> Dict:
                                                               branch, month)
                 # Store all available days for this month (not just new ones)
                 branch_result['months'][month + 1] = available_days
-    
+
                 if new_available_days:
                     print(f"Branch {branch + 1}, Month {month + 1} found NEW days: {new_available_days}")
 
@@ -125,14 +187,22 @@ async def search_branch(page: Page, branch: int) -> Dict:
 async def run_search():
     async with async_playwright() as playwright:
         chromium = playwright.chromium
-        browser = await chromium.launch(headless=True)
+        browser = await get_browser(chromium)
 
         # Create 5 tabs in the same browser and search concurrently
         tasks = []
         pages = []
         for branch in range(5):
-            page = await browser.new_page()
+            context = await get_context(browser)
+
+            page = await context.new_page()
+
+            # Remove webdriver property
+            await add_page_script(page)
+
             pages.append(page)
+            await asyncio.sleep(uniform(1, 2))
+
             # Create task explicitly using asyncio.create_task()
             task = asyncio.create_task(search_branch(page, branch))
             tasks.append(task)
