@@ -27,7 +27,7 @@ BOT_API_KEY = config("BOT_API_KEY")
 LAST_AVAILABLE_TIME = perf_counter()
 HOUR_DIFFERENCE = 12
 
-USERS_FILE = "users.json"
+USERS_FILE = "src/users.json"
 WAIT_SECOND = 60
 INFO_SENT = False
 
