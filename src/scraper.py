@@ -10,68 +10,6 @@ TRP_LINK = ("https://broneering.politsei.ee/MakeReservation/SelectLocation?"
 AVAILABLE_DAYS = {i: defaultdict(list) for i in range(5)}
 
 
-async def get_browser(chromium: async_playwright) -> async_playwright:
-    return await chromium.launch(
-        headless=True,
-        args=[
-            '--disable-blink-features=AutomationControlled',
-            '--disable-dev-shm-usage',
-            '--disable-web-security',
-            '--disable-features=IsolateOrigins,site-per-process',
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-accelerated-2d-canvas',
-            '--disable-gpu',
-            '--window-size=1920,1080',
-            '--start-maximized',
-            '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        ]
-    )
-
-
-async def get_context(browser: async_playwright) -> async_playwright:
-    return await browser.new_context(
-                viewport={'width': 1920, 'height': 1080},
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                locale='et-EE',  # Estonian locale
-                timezone_id='Europe/Tallinn',
-
-                extra_http_headers={
-                    'Accept-Language': 'et-EE,et;q=0.9,en;q=0.8',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Connection': 'keep-alive',
-                    'Upgrade-Insecure-Requests': '1',
-                }
-            )
-
-
-async def add_page_script(page: async_playwright) -> None:
-    await page.add_init_script("""
-                                Object.defineProperty(navigator, 'webdriver', {
-                                    get: () => undefined
-                                });
-    
-                                // Override the permissions API
-                                const originalQuery = window.navigator.permissions.query;
-                                window.navigator.permissions.query = (parameters) => (
-                                    parameters.name === 'notifications' ?
-                                        Promise.resolve({ state: Notification.permission }) :
-                                        originalQuery(parameters)
-                                );
-    
-                                // Override plugins
-                                Object.defineProperty(navigator, 'plugins', {
-                                    get: () => [1, 2, 3, 4, 5]
-                                });
-    
-                                // Override languages
-                                Object.defineProperty(navigator, 'languages', {
-                                    get: () => ['et-EE', 'et', 'en-US', 'en']
-                                });
-                            """)
-
-
 async def get_branches(page: Page) -> tuple:
     await page.wait_for_selector(".btn.btn-light.btn-lg.btn-block.no-shadow",
                                  timeout=30_000)
@@ -85,9 +23,25 @@ async def get_branches(page: Page) -> tuple:
 async def open_calendar(page: Page) -> None:
     button = page.get_by_role("button", name="Edasi")
     await button.click()
+    # Add extra wait after clicking to ensure page transition completes
+    await asyncio.sleep(uniform(2, 3))
 
 
 async def get_available_days(page: Page) -> List[str]:
+    # Try multiple selectors and wait strategies
+    try:
+        # First try to wait for the calendar container
+        await page.wait_for_selector(".calendar", timeout=10_000)
+    except:
+        pass
+
+    # Add a small delay to ensure dynamic content loads
+    await asyncio.sleep(uniform(1, 2))
+
+    # Try waiting for network idle state
+    await page.wait_for_load_state("networkidle", timeout=15_000)
+
+    # Now wait for the days with a longer timeout
     await page.wait_for_selector(".day", timeout=45_000)
     days = page.locator(".day")
     count = await days.count()
@@ -105,8 +59,11 @@ async def get_available_days(page: Page) -> List[str]:
 async def open_next_month(page: Page) -> None:
     link = page.locator("a:has-text('järgmine kuu')")
     await link.wait_for(state="visible", timeout=30_000)
-    await asyncio.sleep(uniform(1, 3))
+    await asyncio.sleep(uniform(2, 4))  # Increased delay
     await link.click()
+    # Wait for the calendar to update
+    await page.wait_for_load_state("networkidle", timeout=15_000)
+    await asyncio.sleep(uniform(1, 2))
 
 
 def check_new_available_days(available_days: List[str],
@@ -140,7 +97,12 @@ async def search_branch(page: Page, branch: int) -> Dict:
     }
 
     try:
-        await page.goto(TRP_LINK)
+        await page.goto(TRP_LINK, wait_until="networkidle")
+
+        # Wait for page to fully load
+        await page.wait_for_load_state("domcontentloaded")
+        await asyncio.sleep(uniform(2, 3))
+
         buttons, count = await get_branches(page)
 
         # Click the specific branch
@@ -187,20 +149,73 @@ async def search_branch(page: Page, branch: int) -> Dict:
 async def run_search():
     async with async_playwright() as playwright:
         chromium = playwright.chromium
-        browser = await get_browser(chromium)
 
-        # Create 5 tabs in the same browser and search concurrently
+        # Enhanced browser configuration for headless mode
+        browser = await chromium.launch(
+            headless=True,
+            args=[
+                '--disable-blink-features=AutomationControlled',
+                '--disable-dev-shm-usage',
+                '--disable-web-security',
+                '--disable-features=IsolateOrigins,site-per-process',
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-accelerated-2d-canvas',
+                '--disable-gpu',
+                '--window-size=1920,1080',
+                '--start-maximized',
+                '--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            ]
+        )
+
+        # Create 5 tabs with enhanced context configuration
         tasks = []
         pages = []
         for branch in range(5):
-            context = await get_context(browser)
+            context = await browser.new_context(
+                viewport={'width': 1920, 'height': 1080},
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                locale='et-EE',  # Estonian locale
+                timezone_id='Europe/Tallinn',
+                # Remove automation indicators
+                extra_http_headers={
+                    'Accept-Language': 'et-EE,et;q=0.9,en;q=0.8',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                }
+            )
 
             page = await context.new_page()
 
             # Remove webdriver property
-            await add_page_script(page)
+            await page.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {
+                    get: () => undefined
+                });
+
+                // Override the permissions API
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                        Promise.resolve({ state: Notification.permission }) :
+                        originalQuery(parameters)
+                );
+
+                // Override plugins
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [1, 2, 3, 4, 5]
+                });
+
+                // Override languages
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['et-EE', 'et', 'en-US', 'en']
+                });
+            """)
 
             pages.append(page)
+            # Add delay between creating tabs to avoid detection
             await asyncio.sleep(uniform(1, 2))
 
             # Create task explicitly using asyncio.create_task()
