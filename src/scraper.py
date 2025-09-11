@@ -31,45 +31,45 @@ async def get_browser(chromium: async_playwright) -> async_playwright:
 
 async def get_context(browser: async_playwright) -> async_playwright:
     return await browser.new_context(
-                viewport={'width': 1920, 'height': 1080},
-                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                locale='et-EE',  # Estonian locale
-                timezone_id='Europe/Tallinn',
+        viewport={'width': 1920, 'height': 1080},
+        user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        locale='et-EE',  # Estonian locale
+        timezone_id='Europe/Tallinn',
 
-                extra_http_headers={
-                    'Accept-Language': 'et-EE,et;q=0.9,en;q=0.8',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'Connection': 'keep-alive',
-                    'Upgrade-Insecure-Requests': '1',
-                }
-            )
+        extra_http_headers={
+            'Accept-Language': 'et-EE,et;q=0.9,en;q=0.8',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        }
+    )
 
 
 async def add_page_script(page: async_playwright) -> None:
     await page.add_init_script("""
-                                Object.defineProperty(navigator, 'webdriver', {
-                                    get: () => undefined
-                                });
-    
-                                // Override the permissions API
-                                const originalQuery = window.navigator.permissions.query;
-                                window.navigator.permissions.query = (parameters) => (
-                                    parameters.name === 'notifications' ?
-                                        Promise.resolve({ state: Notification.permission }) :
-                                        originalQuery(parameters)
-                                );
-    
-                                // Override plugins
-                                Object.defineProperty(navigator, 'plugins', {
-                                    get: () => [1, 2, 3, 4, 5]
-                                });
-    
-                                // Override languages
-                                Object.defineProperty(navigator, 'languages', {
-                                    get: () => ['et-EE', 'et', 'en-US', 'en']
-                                });
-                            """)
+        Object.defineProperty(navigator, 'webdriver', {
+            get: () => undefined
+        });
+
+        // Override the permissions API
+        const originalQuery = window.navigator.permissions.query;
+        window.navigator.permissions.query = (parameters) => (
+            parameters.name === 'notifications' ?
+                Promise.resolve({ state: Notification.permission }) :
+                originalQuery(parameters)
+        );
+
+        // Override plugins
+        Object.defineProperty(navigator, 'plugins', {
+            get: () => [1, 2, 3, 4, 5]
+        });
+
+        // Override languages
+        Object.defineProperty(navigator, 'languages', {
+            get: () => ['et-EE', 'et', 'en-US', 'en']
+        });
+    """)
 
 
 async def get_branches(page: Page) -> tuple:
